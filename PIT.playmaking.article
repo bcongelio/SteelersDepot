@@ -1,0 +1,263 @@
+##Grabbing play-by-play data for 2020
+data.2020 <- readRDS(url('https://raw.githubusercontent.com/guga31bb/nflfastR-data/master/data/play_by_play_2020.rds'))
+
+options(digits=2)
+
+##Screens & Bubble Screens##
+play.making <- data.2020 %>%
+  filter(season_type == "REG" & !is.na(air_yards)) %>%
+  group_by(posteam) %>%
+  filter(air_yards <= 0 & air_yards >= -7) %>%
+  summarize(meanay = mean(air_yards, na.rm = T),
+            meanyac = mean(yards_after_catch, na.rm = T),
+            avggain = meanyac + meanay)
+
+##Joining
+play.making <- play.making %>%
+  left_join(teams_colors_logos, by = c("posteam" = "team_abbr"))
+
+##Table Theme
+table_theme <- function(data,...) {
+  data %>%
+    opt_all_caps()  %>%
+    opt_table_font(
+      font = list(
+        google_font("Chivo"),
+        default_fonts()
+      )
+    ) %>%
+    text_transform(
+      locations = cells_body(
+        vars(team_logo_espn)
+      ),
+      fn = function(x) {
+        web_image(
+          url = x,
+          height = 25
+        )
+      }
+    ) %>%
+    tab_style(
+      style = cell_borders(
+        sides = "bottom", color = "transparent", weight = px(2)
+      ),
+      locations = cells_body(
+        columns = TRUE,
+        # This is a relatively sneaky way of changing the bottom border
+        # Regardless of data size
+        rows = nrow(data$`_data`)
+      )
+    )  %>% 
+    tab_options(
+      column_labels.background.color = "white",
+      table.border.top.width = px(3),
+      table.border.top.color = "transparent",
+      table.border.bottom.color = "transparent",
+      table.border.bottom.width = px(3),
+      column_labels.border.top.width = px(3),
+      column_labels.border.top.color = "transparent",
+      column_labels.border.bottom.width = px(3),
+      column_labels.border.bottom.color = "black",
+      data_row.padding = px(3),
+      source_notes.font.size = 12,
+      table.font.size = 16,
+      heading.align = "left",
+      ...
+    ) 
+}
+
+
+##Playmaking Table
+play.making.negative <- play.making %>%
+  select(team_logo_espn, meanay, meanyac, avggain) %>%
+  arrange(desc(avggain)) %>%
+  gt() %>%
+  tab_spanner(
+    label = "Average Net Gain on Passes With Air Yards Between 0 & -7",
+    columns = vars(team_logo_espn, meanay, meanyac, avggain)
+  ) %>% 
+  data_color(
+    columns = vars(avggain),
+    colors = scales::col_numeric(
+      palette = c("white", "red"),
+      domain = NULL
+    )
+  ) %>% 
+  cols_label(
+    team_logo_espn = "Team",
+    meanay = "Avg. Air Yards",
+    meanyac = "Avg. YAC",
+    avggain = "Avg. Net Gain"
+  ) %>% 
+  cols_align(
+    columns = vars(team_logo_espn, meanay, meanyac, avggain),
+    align = "center"
+  ) %>%
+  tab_source_note(
+    source_note = md("Data: nflfastR<br>Table: @BradCongelio")
+  ) %>% 
+  table_theme()
+
+##Saving
+gtsave(play.making.negative, "playmaking-negative.png")
+
+##Gathering Data for First Downs with YAC
+first.downs <- data.2020 %>%
+  group_by(posteam) %>%
+  filter(season_type == "REG" & !is.na(air_yards) & play_type == "pass") %>%
+  filter(down == 3 & ydstogo <= 10) %>%
+  filter(air_yards < ydstogo) %>%
+  mutate(difference = ydstogo - air_yards) %>%
+  summarize(total = n(),
+            yac.first = sum(yards_after_catch >= difference, na.rm = T),
+            percent = yac.first / total) %>%
+  ungroup()
+
+##Joining
+first.downs <- first.downs %>%
+  left_join(teams_colors_logos, by = c("posteam" = "team_abbr"))
+
+
+##First Down Table
+first.downs <- first.downs %>%
+  select(team_logo_espn, total, yac.first, percent) %>%
+  arrange(desc(percent)) %>%
+  gt() %>%
+  tab_spanner(
+    label = "Converting On Third Down with Yards After Catch",
+    columns = vars(team_logo_espn, total, yac.first, percent)
+  ) %>% 
+  data_color(
+    columns = vars(percent),
+    colors = scales::col_numeric(
+      palette = c("white", "red"),
+      domain = NULL
+    )
+  ) %>% 
+  cols_label(
+    team_logo_espn = "Team",
+    total = "Total Attempts",
+    yac.first = "Conversions",
+    percent = "Percentage"
+  ) %>% 
+  cols_align(
+    columns = vars(team_logo_espn, total, yac.first, percent),
+    align = "center"
+  ) %>%
+  fmt_percent(
+    columns = vars(percent),
+    decimals = 1
+  ) %>%
+  tab_source_note(
+    source_note = md("Data: nflfastR<br>Table: @BradCongelio")
+  ) %>% 
+  table_theme()
+
+gtsave(first.downs, "first-downs.png")
+
+
+##Gathering Data for Player First Downs with YAC
+player.first.downs <- data.2020 %>%
+  group_by(receiver_player_name, receiver_player_id) %>%
+  filter(posteam == "PIT" & season_type == "REG" & !is.na(air_yards) & play_type == "pass") %>%
+  filter(down == 3 & ydstogo <= 10) %>%
+  filter(air_yards < ydstogo) %>%
+  mutate(difference = ydstogo - air_yards) %>%
+  summarize(total = n(),
+            yac.first = sum(yards_after_catch >= difference, na.rm = T),
+            percent = yac.first / total) %>%
+  decode_player_ids() %>%
+  left_join(roster, by = c("receiver_player_id" = "gsis_id")) %>%
+  ungroup()
+
+##Editing Table Theme for Headshots
+player_theme <- function(data,...) {
+  data %>%
+    opt_all_caps()  %>%
+    opt_table_font(
+      font = list(
+        google_font("Chivo"),
+        default_fonts()
+      )
+    ) %>%
+    text_transform(
+      locations = cells_body(
+        vars(headshot_url)
+      ),
+      fn = function(x) {
+        web_image(
+          url = x,
+          height = 25
+        )
+      }
+    ) %>%
+    tab_style(
+      style = cell_borders(
+        sides = "bottom", color = "transparent", weight = px(2)
+      ),
+      locations = cells_body(
+        columns = TRUE,
+        # This is a relatively sneaky way of changing the bottom border
+        # Regardless of data size
+        rows = nrow(data$`_data`)
+      )
+    )  %>% 
+    tab_options(
+      column_labels.background.color = "white",
+      table.border.top.width = px(3),
+      table.border.top.color = "transparent",
+      table.border.bottom.color = "transparent",
+      table.border.bottom.width = px(3),
+      column_labels.border.top.width = px(3),
+      column_labels.border.top.color = "transparent",
+      column_labels.border.bottom.width = px(3),
+      column_labels.border.bottom.color = "black",
+      data_row.padding = px(3),
+      source_notes.font.size = 12,
+      table.font.size = 16,
+      heading.align = "left",
+      ...
+    ) 
+}
+
+
+##Player First Down Table
+player.first.downs <- player.first.downs %>%
+  select(receiver_player_name, headshot_url, total, yac.first, percent) %>%
+  arrange(desc(percent)) %>%
+  gt() %>%
+  tab_spanner(
+    label = "Converting On Third Down with Yards After Catch",
+    columns = vars(receiver_player_name, headshot_url, total, yac.first, percent)
+  ) %>% 
+  data_color(
+    columns = vars(percent),
+    colors = scales::col_numeric(
+      palette = c("white", "red"),
+      domain = NULL
+    )
+  ) %>% 
+  cols_label(
+    receiver_player_name = "Receiver",
+    headshot_url = "",
+    total = "Receptions",
+    yac.first = "Conversions",
+    percent = "Percentage"
+  ) %>% 
+  cols_align(
+    columns = vars(receiver_player_name, headshot_url, total, yac.first, percent),
+    align = "center"
+  ) %>%
+  fmt_percent(
+    columns = vars(percent),
+    decimals = 1
+  ) %>%
+  tab_source_note(
+    source_note = md("Data: nflfastR<br>Table: @BradCongelio")
+  ) %>% 
+  player_theme()
+
+gtsave(player.first.downs, "player.first-downs.png")
+
+
+
