@@ -1,0 +1,73 @@
+######################################
+## PROTOTYPING FOR JUST 2020 SEASON ##
+######################################
+
+testing <- data.2020 %>%
+  filter(rush == 1, qb_scramble == 0, qb_kneel == 0, aborted_play == 0) %>%
+  mutate(
+    first.success = case_when(
+       down == 1 & (yards_gained >= 6 | (yards_gained >= ydstogo * .40)) ~ 1)) %>%
+  mutate(
+    second.success = case_when(
+      down == 2 & (yards_gained >= 6 | (yards_gained >= ydstogo * .50)) ~ 1)) %>%
+  mutate(
+    third.success = case_when(
+      down == 3 & first_down == 1 ~ 1)) %>%
+  mutate(
+    fourth.success = case_when(
+      down == 4 & first_down == 1 ~ 1))
+ 
+
+success.rate <- testing %>%
+  group_by(posteam, season) %>%
+  filter(rush == 1, qb_scramble == 0, penalty == 0, qb_kneel == 0) %>%
+  summarize(
+    total.attempts = n(),
+    first.down.success = sum(first.success, na.rm = T) / sum(rush[down == 1], na.rm = T),
+    second.down.success = sum(second.success, na.rm = T) / sum(rush[down == 2], na.rm = T),
+    third.and.fourth = sum(third.success, na.rm = T) + sum(fourth.success, na.rm = T),
+    third.and.fourth.success = third.and.fourth / sum(rush[down > 2], na.rm = T),
+    total.success = sum(first.success, na.rm = T) + sum(second.success, na.rm = T)  + sum(third.success, na.rm = T) + sum(fourth.success, na.rm = T),
+    complete = total.success / total.attempts * 100)
+
+
+######################################
+## COLLECTING ALL SEASONS SINCE 2010 ##
+######################################
+
+seasons <- 2010:2020
+pbp <- map_df(seasons, function(x) {
+  readRDS(
+    url(
+      paste0("https://raw.githubusercontent.com/guga31bb/nflfastR-data/master/data/play_by_play_",x,".rds")
+    )
+  )
+})
+
+all.seasons <- pbp %>%
+  filter(rush == 1, qb_scramble == 0, qb_kneel == 0, aborted_play == 0) %>%
+  mutate(
+    first.success = case_when(
+      down == 1 & (yards_gained >= 6 | (yards_gained >= ydstogo * .40)) ~ 1)) %>%
+  mutate(
+    second.success = case_when(
+      down == 2 & (yards_gained >= 6 | (yards_gained >= ydstogo * .50)) ~ 1)) %>%
+  mutate(
+    third.success = case_when(
+      down == 3 & first_down == 1 ~ 1)) %>%
+  mutate(
+    fourth.success = case_when(
+      down == 4 & first_down == 1 ~ 1))
+
+
+all.success.rate <- all.seasons %>%
+  group_by(posteam, season) %>%
+  filter(rush == 1, qb_scramble == 0, penalty == 0, qb_kneel == 0) %>%
+  summarize(
+    total.attempts = n(),
+    first.down.success = sum(first.success, na.rm = T) / sum(rush[down == 1], na.rm = T),
+    second.down.success = sum(second.success, na.rm = T) / sum(rush[down == 2], na.rm = T),
+    third.and.fourth = sum(third.success, na.rm = T) + sum(fourth.success, na.rm = T),
+    third.and.fourth.success = third.and.fourth / sum(rush[down > 2], na.rm = T),
+    total.success = sum(first.success, na.rm = T) + sum(second.success, na.rm = T)  + sum(third.success, na.rm = T) + sum(fourth.success, na.rm = T),
+    complete = total.success / total.attempts * 100)
