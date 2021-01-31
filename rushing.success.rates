@@ -2,6 +2,8 @@
 ## PROTOTYPING FOR JUST 2020 SEASON ##
 ######################################
 
+data.2020 <- readRDS(url('https://raw.githubusercontent.com/guga31bb/nflfastR-data/master/data/play_by_play_2020.rds'))
+
 testing <- data.2020 %>%
   filter(rush == 1, qb_scramble == 0, qb_kneel == 0, aborted_play == 0) %>%
   mutate(
@@ -16,7 +18,6 @@ testing <- data.2020 %>%
   mutate(
     fourth.success = case_when(
       down == 4 & first_down == 1 ~ 1))
- 
 
 success.rate <- testing %>%
   group_by(posteam, season) %>%
@@ -71,3 +72,135 @@ all.success.rate <- all.seasons %>%
     third.and.fourth.success = third.and.fourth / sum(rush[down > 2], na.rm = T),
     total.success = sum(first.success, na.rm = T) + sum(second.success, na.rm = T)  + sum(third.success, na.rm = T) + sum(fourth.success, na.rm = T),
     complete = total.success / total.attempts * 100)
+    
+##########################################
+## SCRAPPING PRO FOOTBALL REFERENCE ##
+######################################
+
+anya.2010 <- "https://www.pro-football-reference.com/years/2010/index.htm" %>% 
+  read_html %>% 
+  html_nodes(xpath = '//div[@id="all_passing"]//comment()') %>% 
+  html_text %>%
+  paste(collapse = '') %>%
+  read_html %>% 
+  html_table %>% 
+  extract2(1)
+
+
+######################################
+## CLEANING THE SCRAPPED DATA ##
+######################################
+
+anya.2010$Rk <- NULL
+anya.2010 <- as.data.table(anya.2010)
+anya.2010 <- anya.2010[c(1:32)]
+anya.2010 <- anya.2010 %>%
+  select(Tm, `ANY/A`)
+anya.2010$season <- "2010"
+
+######################################
+## COMBINING INTO ONE ##
+######################################
+
+anya.complete <- rbind(
+  anya.2010,
+  anya.2011,
+  anya.2012,
+  anya.2013,
+  anya.2014,
+  anya.2015,
+  anya.2016,
+  anya.2017,
+  anya.2018,
+  anya.2019,
+  anya.2020
+)
+
+
+######################################
+## ADDING POSTEAM REFERENCES ##
+######################################
+
+anya.complete <- anya.complete %>%
+  mutate(
+    posteam = case_when(
+      Tm == 'Arizona Cardinals' ~ "ARI",
+      Tm == 'Atlanta Falcons' ~ "ATL",
+      Tm == 'Baltimore Ravens' ~ "BAL",
+      Tm == 'Buffalo Bills' ~ "BUF",
+      Tm == 'Carolina Panthers' ~ "CAR",
+      Tm == 'Chicago Bears' ~ "CHI",
+      Tm == 'Cincinnati Bengals' ~ "CIN",
+      Tm == 'Cleveland Browns' ~ "CLE",
+      Tm == 'Dallas Cowboys' ~ "DAL",
+      Tm == 'Denver Broncos' ~ "DEN",
+      Tm == 'Detroit Lions' ~ "DET",
+      Tm == 'Green Bay Packers' ~ "GB",
+      Tm == 'Houston Texans' ~ "HOU",
+      Tm == 'Indianapolis Colts' ~ "IND",
+      Tm == 'Jacksonville Jaguars' ~ "JAX",
+      Tm == 'Kansas City Chiefs' ~ "KC",
+      Tm == 'Las Vegas Raiders' ~ "LV",
+      Tm == 'Los Angeles Chargers' ~ "LAC",
+      Tm == 'Los Angeles Rams' ~ "LA",
+      Tm == 'Miami Dolphins' ~ "MIA",
+      Tm == 'Minnesota Vikings' ~ "MIN",
+      Tm == 'New England Patriots' ~ "NE",
+      Tm == 'New Orleans Saints' ~ "NO",
+      Tm == 'New York Giants' ~ "NYG",
+      Tm == 'New York Jets' ~ "NYJ",
+      Tm == 'Philadelphia Eagles' ~ "PHI",
+      Tm == 'Pittsburgh Steelers' ~ "PIT",
+      Tm == 'San Francisco 49ers' ~ "SF",
+      Tm == 'Seattle Seahawks' ~ "SEA",
+      Tm == 'Tampa Bay Buccaneers' ~ "TB",
+      Tm == 'Tennessee Titans' ~ "TEN",
+      Tm == 'Washington Football Team' ~ "WAS",
+      Tm == 'St. Louis Rams' ~ "LA",
+      Tm == 'Oakland Raiders' ~ "LAV",
+      Tm == 'San Diego Chargers' ~ "LAC",
+      Tm == 'Washington Redskins' ~ "WAS"
+    )
+  )
+
+
+######################################
+## DELETING FULL REFERENCE ##
+######################################
+
+anya.complete$Tm <- NULL
+
+######################################
+## SWITCHIN ORDER OF COLUMNS ##
+######################################
+
+anya.complete <- anya.complete[,c(3,2,1)]
+
+######################################
+## CONVERTING TO NUMERIC & Name Change ##
+######################################
+
+anya.complete$season <- as.numeric(anya.complete$season)
+anya.complete <- anya.complete %>%
+  rename("anya" = "ANY/A")
+
+
+######################################
+## LEFT MERGING WITH SUCCESS RATE ##
+######################################
+
+combined.data <- left_join(all.success.rate, anya.complete, by = c("posteam" = "posteam", "season" = "season"))
+
+
+######################################
+## LEFT MERGING WITH TEAMS, COLORS, LOGOS ##
+######################################
+
+combined.data <- combined.data %>%
+  left_join(teams_colors_logos, by = c("posteam" = "team_abbr"))
+
+
+
+
+
+    
