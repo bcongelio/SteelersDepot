@@ -198,6 +198,123 @@ combined.data <- left_join(all.success.rate, anya.complete, by = c("posteam" = "
 
 combined.data <- combined.data %>%
   left_join(teams_colors_logos, by = c("posteam" = "team_abbr"))
+  
+#####################
+## PLOT 1 ###########
+#####################
+
+season.2020 <- combined.data %>%
+  filter(season == 2020) %>%
+  group_by(posteam)
+
+ggplot(data = season.2020, aes(x = complete, y = reorder(posteam, complete))) +
+  geom_image(aes(image = season.2020$team_logo_espn), asp = 16 / 9) +
+  theme_538() +
+  theme(panel.grid.major.y = element_blank()) +
+  theme(axis.text.y = element_blank()) +
+  scale_x_continuous(breaks = seq(45.0, 65.0, by = 1),
+                     labels = function(x) paste0(x, "%")) +
+  xlab("Rushing Success Rate: All Downs") +
+  ylab("") +
+  coord_cartesian(clip = "off") +
+  geom_vline(xintercept = mean(season.2020$complete), size = 1.5) +
+  theme(aspect.ratio = 9 / 16)
+
+ggsave("rushing-success-2020.png", dpi = 400)
+  
+  
+######################################
+## KC/TB SUPER BOWL TABLE ##
+######################################
+  superbowl <- superbowl %>%
+  left_join(teams_colors_logos, by = c("posteam" = "team_abbr"))
+
+
+superbowl.success.rate <- superbowl %>%
+  select(team_wordmark, first.down, first.place, second.down, second.place, third.down, third.place) %>%
+  gt() %>%
+  tab_spanner(
+    label = "TB & KC: Rushing Success Rates Based on Down",
+    columns = vars(team_wordmark, first.down, first.place, second.down, second.place, third.down, third.place)
+  ) %>% 
+   cols_label(
+    team_wordmark = "Team",
+    first.down = "1st Down Rate",
+    first.place = "NFL Rank",
+    second.down = "2nd Down Rate",
+    second.place = "NFL Rank",
+    third.down = "3rd/4th Down Rate",
+    third.place = "NFL Rank"
+  ) %>% 
+  fmt_percent(
+    columns = vars(first.down, second.down, third.down),
+    decimals = 1
+  ) %>%
+  cols_align(
+    columns = vars(team_wordmark, first.down, first.place, second.down, second.place, third.down, third.place),
+    align = "center"
+  ) %>%
+  tab_source_note(
+    source_note = md("Data: nflfastR<br>Table: @BradCongelio")
+  ) %>% 
+  tab_style(
+    style = list(
+      cell_fill(color = "#FFDB6D"),
+      cell_text(style = "normal")
+    ),
+    locations = cells_body(
+      columns = vars(first.place, second.place, third.place)
+  )) %>%
+  table_theme(table.width = px(550))
+
+gtsave(superbowl.success.rate, "super-bowl-sr.png")
+
+
+######################################
+## ANY/A VS SUCCESS RATE PLOT ##
+######################################
+comparison <- combined.data %>%
+  group_by(posteam) %>%
+  summarize(success.rate = mean(complete),
+            anya = mean(anya),
+            appearances = sum(playoffs.fixed == 1))
+
+comparison <- comparison %>%
+  left_join(teams_colors_logos, by = c("posteam" = "team_abbr"))
+
+ggplot(data = comparison, aes(x = anya, y = success.rate)) +
+  geom_image(aes(image = team_logo_espn), size = comparison$appearances / 75, asp = 16 / 9) +
+  theme_538() +
+  theme(panel.grid.major.y = element_blank()) +
+  scale_x_continuous(breaks = seq(4.5, 7.5, by = .5)) +
+  scale_y_continuous(breaks = seq(45, 55, 1),
+                     labels = function(x) paste0(x, "%")) +
+  geom_vline(xintercept = mean(comparison$anya), size = .8, linetype = "dashed") +
+  geom_hline(yintercept = mean(comparison$success.rate), size = .8, linetype = "dashed") +
+  theme(aspect.ratio = 9 / 16) +
+  coord_cartesian(clip = "off") +
+  xlab("ANY/A") +
+  ylab("Rushing Success Rate")
+
+ggsave("sr-vs-anya.png", dpi = 400)
+ 
+ 
+ ######################################
+## QUICK AND DIRTY REGRESSION STUFF ##
+######################################
+
+model <- lm(pct ~ complete + anya, data = combined.data)
+summary(model)
+
+model %>%
+  tbl_regression()%>%
+  bold_labels() %>%
+  bold_p() %>%
+  cols_label(
+    first.down.success = "1st Down Success"
+  )
+
+
 
 
 
