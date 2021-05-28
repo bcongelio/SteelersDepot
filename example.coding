@@ -1,0 +1,95 @@
+
+iay.non.dpi <- data.2020 %>%
+  filter(complete_pass == 1 | incomplete_pass == 1 | interception == 1 | qb_spike == 1) %>%
+  group_by(passer, posteam, passer_player_id) %>%
+  summarize(non.dpi.air.yards = sum(air_yards, na.rm = TRUE),
+            non.dpi.attempts = sum(pass_attempt)) %>%
+  ungroup()
+
+iay.with.dpi <- data.2020 %>% 
+  group_by(passer) %>%
+  filter(penalty_type == "Defensive Pass Interference") %>%
+  summarize(dpi.yardage = sum(penalty_yards, na.rm = TRUE),
+            dpi.attempts = n()) %>%
+  ungroup()
+
+combined.iay <- iay.non.dpi %>%
+  left_join(iay.with.dpi, by = c("passer" = "passer"))
+
+combined.iay <- combined.iay %>%
+  filter(non.dpi.attempts >= 200)
+
+results.iay <- combined.iay %>%
+  group_by(passer, posteam, passer_player_id) %>%
+  summarize(total.air.yards.iay = non.dpi.air.yards + dpi.yardage,
+            total.attempts = non.dpi.attempts + dpi.attempts,
+            intended.ay = total.air.yards.iay / total.attempts) %>%
+  ungroup()
+
+
+completed.air.yards <- data.2020 %>%
+  filter(complete_pass == 1) %>%
+  group_by(passer, posteam, passer_player_id) %>%
+  summarize(completed.air.yards = sum(air_yards, na.rm = TRUE),
+            total.ay.completions = sum(complete_pass == 1)) %>%
+  ungroup()
+
+dpi.cay <- data.2020 %>% 
+  group_by(passer) %>%
+  filter(penalty_type == "Defensive Pass Interference") %>%
+  summarize(dpi.yardage = sum(penalty_yards, na.rm = TRUE),
+            dpi.attempts = n()) %>%
+  ungroup()
+
+combined.cay <- completed.air.yards %>%
+  left_join(dpi.cay, by = c("passer" = "passer"))
+
+results.cay <- combined.cay %>%
+  group_by(passer, posteam, passer_player_id) %>%
+  summarize(
+    total.completions = total.ay.completions + dpi.attempts,
+    total.air.yards.cay = completed.air.yards + dpi.yardage,
+    final.cay = total.air.yards.cay / total.completions
+  ) %>%
+  ungroup()
+
+combined.results <- results.iay %>%
+  left_join(results.cay, by = c("passer" = "passer"))
+
+
+combined.results$difference
+
+
+ggplot() +
+geom_dumbbell(data = combined.results, aes(y = reorder(passer, -intended.ay), x = final.cay, xend = intended.ay),
+              color = "#a3c4dc",
+              size = 0.5,
+              point.colour.1 = "#0e668b")
+
+
+
+ggplot() +
+  geom_dumbbell(data = combined.results, aes(y = reorder(passer, -intended.ay), x = final.cay, xend = intended.ay),
+                size = 2, color = "black",
+                colour_x = "#5b8124",
+                colour_xend = "#bad744",
+                dot_guide = TRUE, dot_guide_size = 1, dot_guide_colour = "black",
+                size_x = 5, size_xend = 5) +
+  theme_bw() +
+  theme(panel.background=element_rect(fill="#FFFFFF")) +
+  theme(plot.background=element_rect(fill="#FFFFFF")) +
+  theme(panel.border=element_rect(colour="#FFFFFF")) +
+  theme(panel.grid.major=element_line(colour="#D0D0D0",size=.75)) +
+  theme(axis.text.x=element_text(angle = 50, vjust = 0.5,    size=11,colour="#535353",face="bold")) +
+  theme(axis.text.y=element_text(size=11,colour="#535353",face="bold")) +
+  theme(axis.title.y=element_text(size=11,colour="#535353",face="bold",vjust=1.5)) +
+  theme(axis.title.x=element_text(size=11,colour="#535353",face="bold",vjust=-.5)) +
+  theme(plot.title=element_text(face="bold", colour="#3C3C3C",size=15)) +
+  theme(axis.ticks.x = element_blank()) +
+  theme(axis.ticks.y = element_blank()) +
+  scale_x_continuous(breaks = seq(5, 10, by = .5)) +
+  xlab("") +
+  ylab("")
+
+ggsave("iay-vs-cay.png", dpi = 400)
+
